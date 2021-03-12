@@ -1,0 +1,582 @@
+---
+title: "Final Project - Winning Factors for Home Teams in Soccer Games"
+author: "Liyao Zhang, Haochun Wang"
+date: "2019/11/26"
+header-includes:
+   - \usepackage{setspace}
+   - \doublespacing
+fontsize: 12pt
+output: pdf_document
+---
+
+```{r, message=FALSE, warning=FALSE, echo = FALSE}
+library(knitr)
+opts_chunk$set(echo = FALSE)
+```
+
+```{r, message=FALSE, warning=FALSE}
+library(fivethirtyeight)
+library(tidyverse)
+library(broom)
+library(readr)
+library(dplyr)
+spi_matches <- 
+  "https://projects.fivethirtyeight.com/soccer-api/club/spi_matches.csv" %>% 
+  read_csv() 
+```
+
+```{r}
+SPI <- spi_matches %>%
+  select(date, league, team1, team2, spi1, spi2, prob1, prob2, probtie, proj_score1, proj_score2, importance1, importance2, score1, score2) %>%
+  mutate(dif = spi1 - spi2, difImportance = importance1 - importance2)
+```
+
+```{r}
+SPI <- SPI %>%
+  filter(score1!="NA", importance1!="NA") %>%
+  mutate(result = case_when(
+    score1 > score2 ~ 1,
+    score1 <= score2 ~ 0
+  ))
+```
+
+## Abstract
+
+In this data analysis, we are exploring what factors are affecting the odds of winning for the home teams in soccer games worldwide. In the data analysis, we are fitting multiple logistic regression models and compare the models using likelihood ratio test, AIC, BIC and McFadden r-squared. We also check the linearity assumption for each variable in our models. 
+
+We both fit models for the whole dataset and the five tiers of the teams that are divided by the criteria of team strength. For the whole dataset in general, the "best" model is the multiple logistic model using the team strength of both teams and the importance of the game for both teams. For different tiers of teams, some best models are using the team strength of both teams and the importance of the game for both teams and some best models are using only the team strength of both teams.
+
+We find that generally, the (log) odds of winning for the home team is increasing as the home team is stronger and is decreasing as the opponent is stronger; the (log) odds of winning for the home team is increasing as the importance of the game is higher and is decreasing as the opponent has higher importance of the game. This coincides with our common knowledge about soccer.
+
+## Introduction
+
+Soccer is one of the most popular sports in the world, especially in Europe and South America. After decades of development, billions of dollars are generated in this industry annually. From commercial advertisements and shares in broadcast rights to soccer equipment and even betting companies, millions of people make a living from soccer. But ultimately, the nature of the industry is soccer matches that take place everyday around the globe. Therefore, we are interested in the games themselves. 
+
+Soccer game is well-known for its uncertainty as there are too many factors for people to determine what the final result would be, which makes it even more fascinating. As a result, we decided to study what factors make home team win in a soccer game. After a brief search, we found an online dataset from FiveThirtyEight called “Match-by-match SPI ratings and forecasts back to 2016”. This dataset is actually part of the project “Club Soccer Predictions” from this data analysis website and updated after each game is played. Two featured variables in the dataset are SPI ratings and match importance. They are both calculated under the unique algorithms provided by FiveThirtyEight. For SPI, it is an estimate of team strength that combines offensive and defensive ratings. And for importance, it represents how the outcome of a game would change the statistical outlook of each team.
+
+## Methods
+
+The dataset we are using in this data analysis is "spi_matches" from package "fivethirtyeight". There are 32290 observations in total (till 10 p.m, Dec.5th, this dataset is updating daily) and each observation refers to a single soccer match. There are 16 effective variables in total (actually there exist 22, but some of the variables are not provided useful information by the provider of the dataset): $date$ refers to the date that the match took place, league_id refers to the numerical identifier of the league within which the match was played, $league$ refers to the league name, $team1$ refers to one team that participated in the match, $team2$ refers to the other team that participated in the match, $spi$ refers to the SPI score of team1 (i.e: Team strength of team1). $spi2$ refers to the SPI score of team2, $prob1$ refers to the probability that team1 would have won the match, $prob2$ refers to the probability that team2 would have won the match, $probtie$ refers to the probability that the match would have resulted in a tie, proj_score1 refers to the predicted number of goals that team1 would have scored, proj_score2 refers to the predicted number of goals that team2 would have scored, $importance1$ refers to the importance of the match for team1, $importance2$ refers to the importance of the match for team2, $score1$ refers to the number of goals that team1 scored and $score2$ refers to the number of goals that team2 scored. By general knowledge in soccer matches, $team1$ refers to home team and $team2$ refers to away team.
+
+There are a lot of missing data in the dataset, which are referring to the future matches that have not happened and the matches that the importances for both teams are not able to be evaluated. To avoid possible consequences of influenced by some mishandling of those missing data, we choose the relatively safe way: we clean them up and our dataset that will be used contains 23215 observations.
+
+The next step we do is clean and add some of the variables. We are interested in the discussing the "home advantages" in soccer games, so we add a new variable of $result$ which is assigned 1 if the home team wins the game and assigned 0 if they ties or loses the game. We set that to be our response variable. Then, we take out the variables of $date$, league_id, $league$, $team1$, $team2$ and other variables that the information are not provided by the provider of the dataset.
+
+In this data analysis, we firstly fit three general models that work for the whole final dataset and then we split the home teams into five tiers of strength (by 0.2, 0.4, 0.6, 0.8) and fit new models for those different tiers of home teams and their matches. Since the response variable, $result$, is binary, we are using three (multiple) logistic regression models. No matter for the general models and the models for each tier, the first model we use is using $spi2$ only as our explanatory variable, since the game outcome highly depends on how good the opponent team is; the second model we use is using $spi1$ and $spi2$ together, since how good the home team is also influence the outcome of games a lot; the third model we use is using $spi1$, $spi2$, $importance1$ and $importance2$ together, since the importance for the two teams in the match also are important for the final game result: for example, if a team does not think the game is important, the team is likely to play lazily on the court. 
+
+For the three models (for general and for each tier), since they are (multiple) logistic regression models, the assumptions are independence, randomness and linearity. For independence and randomness, we could not really have formal kind of testing. However, soccer matches and the outcomes of them, by common knowledge, could be regarded as random and independent. For linearity, we could plot the empirical logits and check if linearity is met or not.
+
+When doing model comparisons, we would apply likelihood ratio test to see if adding variables will get us a better model or not. We will also use AIC, BIC and McFadden r-squared to compare the models: with lower AIC and BIC and higher McFadden r-squared values, the model is better. 
+
+Using the criteria above, our final model is selected by the information provided by the likelihood ratio test and optimally with lowest AIC and BIC and highest McFadden r-squared.
+
+## Results:
+
+In our data analysis, all analysis was completed using R markdown and we have used packages 'knitr', 'fivethirtyeight', 'tidyverse', 'broom', 'readr' and 'dplyr'.
+
+Firstly we check for the assumption of linearity: (note that independence and randomness could not be formally checked, but for soccer matches, they could be regarded as holding because of nature of soccer matches)
+
+```{r, results="hide"}
+quantile(SPI$spi1,0.2)
+quantile(SPI$spi1,0.4)
+quantile(SPI$spi1,0.6)
+quantile(SPI$spi1,0.8)
+```
+
+```{r}
+SPI <- SPI %>%
+  mutate(
+  spi1_cat = case_when(
+  spi1 < 29.13 ~ "quantile 1",
+  spi1 >= 29.13 & spi1 < 39.6 ~ "quantile 2",
+  spi1 >= 39.6 &  spi1 < 50.08 ~ "quantile 3",
+  spi1 >= 50.08 & spi1 < 63.74 ~ "quantile 4",
+  spi1 >= 63.74 ~ "quantile 5"
+))
+```
+
+```{r}
+library(knitr)
+SPI %>%
+  group_by(spi1_cat) %>%
+  summarise(mean(spi1)) %>%
+  kable(caption = "Quantiles and means")
+```
+
+```{r}
+library(knitr)
+SPI %>%
+  group_by(spi1_cat, result) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n),
+         odds = prop/(1-prop),
+         log_odds = log(odds)) %>%
+  filter(result == 1) %>%
+  kable(caption = "Empirical logits and other information")
+```
+
+```{r}
+data1 <- data.frame(
+  mean_spi1 = c(20.40914, 34.61565, 44.49413, 56.70562, 74.59321),
+  emp_logit = c(-0.4600011, -0.3086957, -0.2237253, -0.1582810, 0.2747560)
+)
+ggplot(data1, aes(mean_spi1, emp_logit)) + 
+  geom_point() + 
+  labs(title = "Empirical Logit vs. Mean Spi1", x = "Mean SPI of Team 1", y = "log odds of winning")
+```
+
+```{r, results = "hide"}
+quantile(SPI$spi2,0.2)
+quantile(SPI$spi2,0.4)
+quantile(SPI$spi2,0.6)
+quantile(SPI$spi2,0.8)
+```
+
+```{r}
+SPI <- SPI %>%
+  mutate(
+  spi2_cat = case_when(
+  spi2 < 29.15 ~ "quantile 1",
+  spi2 >= 29.15 & spi2 < 39.5 ~ "quantile 2",
+  spi2 >= 39.5 &  spi2 < 50.05 ~ "quantile 3",
+  spi2 >= 50.05 & spi2 < 63.72 ~ "quantile 4",
+  spi2 >= 63.72 ~ "quantile 5"
+))
+```
+
+```{r}
+library(knitr)
+SPI %>%
+  group_by(spi2_cat) %>%
+  summarise(mean(spi2)) %>%
+  kable(caption = "Quantiles and means")
+```
+
+```{r}
+library(knitr)
+SPI %>%
+  group_by(spi2_cat, result) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n),
+         odds = prop/(1-prop),
+         log_odds = log(odds)) %>%
+  filter(result == 1) %>%
+  kable(caption = "Empirical logits and other information")
+```
+
+```{r}
+data2 <- data.frame(
+  mean_spi2 = c(20.43950, 34.54871, 44.36776, 56.58594, 74.54673),
+  emp_logit = c(0.0150897, -0.0426697, -0.1098586, -0.1662227, -0.5777565)
+)
+ggplot(data2, aes(mean_spi2, emp_logit)) + 
+  geom_point() + 
+  labs(title = "Empirical Logit vs. Mean Spi2", x = "Mean SPI of Team 2", y = "log odds of winning")
+```
+
+```{r, results = "hide"}
+quantile(SPI$importance1,0.25)
+quantile(SPI$importance1,0.5)
+quantile(SPI$importance1,0.75)
+```
+
+```{r}
+SPI <- SPI %>%
+  mutate(
+  importance1_cat = case_when(
+  importance1 < 10.9 ~ "quantile 1",
+  importance1 >= 10.9 & importance1 < 26.1 ~ "quantile 2",
+  importance1 >= 26.1 &  importance1 < 45.3 ~ "quantile 3",
+  importance1 >= 45.3 ~ "quantile 4"
+))
+```
+
+```{r}
+library(knitr)
+SPI %>%
+  group_by(importance1_cat) %>%
+  summarise(mean(importance1)) %>%
+  kable(caption = "Quantiles and means")
+```
+
+```{r}
+library(knitr)
+SPI %>%
+  group_by(importance1_cat, result) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n),
+         odds = prop/(1-prop),
+         log_odds = log(odds)) %>%
+  filter(result == 1) %>%
+  kable(caption = "Empirical logits and other information")
+```
+
+```{r}
+data3 <- data.frame(
+  mean_importance1 = c(3.078908, 18.782330, 35.026542, 67.936947),
+  emp_logit = c(-0.2426765, -0.1858654, -0.3643986, 0.0947188)
+)
+ggplot(data3, aes(mean_importance1, emp_logit)) + 
+  geom_point() + 
+  labs(title = "Empirical Logit vs. Mean importance1", x = "Mean importance of Team 1", y = "log odds of winning")
+```
+
+```{r, results="hide"}
+quantile(SPI$importance2,0.25)
+quantile(SPI$importance2,0.5)
+quantile(SPI$importance2,0.75)
+```
+
+```{r}
+SPI <- SPI %>%
+  mutate(
+  importance2_cat = case_when(
+  importance2 < 10.475 ~ "quantile 1",
+  importance2 >= 10.475 & importance2 < 25.2 ~ "quantile 2",
+  importance2 >= 25.2 &  importance2 < 44.4 ~ "quantile 3",
+  importance2 >= 44.4 ~ "quantile 4"
+))
+```
+
+```{r}
+library(knitr)
+SPI %>%
+  group_by(importance2_cat) %>%
+  summarise(mean(importance2)) %>%
+  kable(caption = "Quantiles and means")
+```
+
+```{r}
+library(knitr)
+SPI %>%
+  group_by(importance2_cat, result) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n),
+         odds = prop/(1-prop),
+         log_odds = log(odds)) %>%
+  filter(result == 1) %>%
+  kable(caption = "Empirical logits and other information")
+```
+
+```{r}
+data4 <- data.frame(
+  mean_importance2 = c(3.004135, 18.163344, 34.002503, 66.880323),
+  emp_logit = c(-0.0517000, -0.1088066, -0.1187544, -0.4188015)
+)
+ggplot(data4, aes(mean_importance2, emp_logit)) + 
+  geom_point() + 
+  labs(title = "Empirical Logit vs. Mean importance2", x = "Mean importance of Team 2", y = "log odds of winning")
+```
+
+Empirical logits plots are made for each explanatory variable in our model. For both $Spi1$ and $Spi2$, the points are linear for the first four quantiles. But the slope suddenly becomes steeper for the best teams in the fifth quantile. We can conclude that SPI variables slightly violated the linearity assumption. However, $importance1$ and $importance2$ don’t meet the assumption since the log odds of winning unexpectedly drops for some quantiles.
+
+Then we start to fit our models. Firstly, we fit a model for our entire dataset, with response variable of result (binary, 1 refers to win for the home team and 0 refers to not win for the home team). Here, the three models we would fit are: 
+
+Model1: $\hat{log(Odds for Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi2$
+
+Model2: $\hat{log(Odds for Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ 
+
+Model3: $\hat{log(Odds for Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ + $\hat{\beta_3}$ * $importance1$ + $\hat{\beta_4}$ * $importance2$
+
+```{r}
+model1 <- glm(result ~ spi2, data = SPI, family = "binomial")
+model1 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model1 Information")
+model1 %>% glance() %>% kable(caption = "Model1 Information")
+
+pchisq(32009.97 - 31756.87, df = 1, lower.tail = FALSE)
+
+model2 <- glm(result ~ spi1 + spi2, data = SPI, family = "binomial")
+model2 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+model2 %>% glance() %>% kable(caption = "Model2 Information")
+
+pchisq(31756.87 - 29539.38, df = 1, lower.tail = FALSE)
+
+model12 <- glm(result ~ spi1 + spi2 + importance1 + importance2, data = SPI, family = "binomial")
+model12 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model3 Information")
+model12 %>% glance() %>% kable(caption = "Model3 Information")
+
+pchisq(29539.38 - 29518.51, df = 2, lower.tail = FALSE)
+
+modelcheck <- glm(result ~ 1, data = SPI, family = "binomial")
+
+1 - (-15878.44 / -16004.98)
+1 - (-14769.69 / -16004.98)
+1 - (-14759.25 / -16004.98)
+```
+
+Model1 uses only $spi2$ as explanatory variable. Here, we use likelihood ratio test to compare this model with the intercept-only model: firstly set up null hypothesis: $\hat{\beta_1} = 0$ and alternative hypothesis $\hat{\beta_1} \neq 0$. Then, we put drop in deviance and change in degrees of freedom, we get p-value equals to 5.478076e-57, which is smaller than 0.05. Which means, null hypothesis is rejected and $\hat{\beta_1} \neq 0$.
+
+Model2 use $spi1$ and $spi2$ at the same time. Here, we apply likelihood ratio test to compare those models at first: our null hypothesis is $\hat{\beta_2} = 0$ and the alternative hypothesis is $\hat{\beta_2} \neq 0$. By putting in the drop in deviance and change in degrees of freedom, we get p-value equals to approximately 0, which is smaller than 0.05. So, it indicates that the null hypothesis is rejected, so $\hat{\beta_2} \neq 0$. Then we look at the AIC and BIC: we note that no matter for AIC and BIC, model2 has smaller values. So, we may conclude that model2 is better than model1.
+
+Then we fit our model3 and compare it with model2: still we apply the likelihood ratio test at first. Firstly we set the null hypothesis to be $\hat{\beta_3} = \hat{\beta_4} = 0$ and the alternative hypothesis to be $\hat{\beta_3} \neq 0$ or $\hat{\beta_4} \neq 0$. By the likelihood ratio test, the p-value is 2.938577e-05, which is smaller than 0.05. That means, null hypothesis is rejected. Then we look at AIC and BIC, we find model3 has smaller AIC and BIC values. Finally, we compare the Mcfadden r-squared: we see that the model3 gets the highest McFadden r-squared value, 0.07787081. So, here, we pick model3 as our "best" model. It has AIC of 29528.51, BIC of 29568.77 and McFadden r-squared of 0.0778339.
+
+By looking at the table, our model3 is: $\hat{log(Odds for Home Team Win)}$ = -0.2542666 + 0.0495105 * $spi1$ + -0.0479789 * $spi2$ + 0.0020808 * $importance1$ + -0.0025197 * $importance2$. The intercept in the model is $\hat{\beta_0} = -0.2542666$, with 95% CI of (-0.3324844, -0.1761076), which means as all other variables equal to 0, the expected log-odds for the home team to win the game is -0.2542666. The coefficient of $spi1$ in the model is 0.0495105, with 95% CI of (0.0471486, 0.0518905), which means holding other variables constant, one-unit increase in $spi1$ increases the expected log-odds of home team to win the game by 0.0495105. The coefficient of $spi2$ in the model is -0.0479789, with 95% CI of (-0.0503698, -0.0456062), which means holding other variables constant, one-unit increase in $spi2$ decreases the expected log-odds of home team to win the game by 0.0479789. The coefficient of $importance1$ is 0.0020808 with 95% CI of (0.0008989, 0.0032635), which means holding other variables constant, one-unit increase in $importance1$ increases the expected log-odds of home team to win the game by 0.0020808. The coefficient of $importance2$ is -0.0025197 with 95% CI of (-0.0037298, -0.0013115), which means holding other variables constant, one-unit increase in $importance2$ decreases the expected log-odds of home team to win the game by 0.0025197.
+
+By the four plots of empirical logits, we see that the linearity assumptions are not quite satisfied since the points are not approximately lying on a line. However, among all the models, model3 is the "best" according to previous analysis.
+
+```{r}
+df1 <- SPI %>% filter(spi1 < 29.13)
+df2 <- SPI %>% filter(spi1 >= 29.13 & spi1 < 39.6)
+df3 <- SPI %>% filter(spi1 >= 39.6 &  spi1 < 50.084)
+df4 <- SPI %>% filter(spi1 >= 50.084 & spi1 < 63.74)
+df5 <- SPI %>% filter(spi1 >= 63.74)
+```
+
+Nextly, we divide the home teams into five tiers according to the team strength and fit new models for those different tiers of home teams and their matches.
+
+### Tier1: the weakest teams, $spi1$ < 29.13
+
+```{r}
+modeltry11 <- glm(result ~ spi2, data = df1, family = "binomial")
+pchisq(6194.627 - 6034.682, df = 1, lower.tail = FALSE)
+
+modeltry12 <- glm(result ~ spi1 + spi2, data = df1, family = "binomial")
+pchisq(6034.682 - 5973.45, df = 1, lower.tail = FALSE)
+
+modeltry13 <- glm(result ~ spi1 + spi2 + importance1 + importance2, data = df1, family = "binomial")
+pchisq(5973.45 - 5967.392, df = 2, lower.tail = FALSE)
+
+modeltry1check <- glm(result ~ 1, data = df1, family = "binomial")
+
+modeltry13 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model3 Information")
+modeltry13 %>% glance() %>% kable(caption = "Model3 Information")
+
+1 - (-2983.696/-3097.313)
+
+```
+
+Still, we fit three models here with model1 one using $spi2$ only, model2 using $spi1$ and $spi2$ and model3 using $spi1$, $spi2$, $importance1$ and $importance2$:
+
+Model1: $\hat{log(Odds for Tier1Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi2$
+
+Model2: $\hat{log(Odds for Tier1Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ 
+
+Model3: $\hat{log(Odds for Tier1Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ + $\hat{\beta_3}$ * $importance1$ + $\hat{\beta_4}$ * $importance2$
+
+Model1 uses only $spi2$ as explanatory variable. Here, we use likelihood ratio test to compare this model with the intercept-only model: firstly set up null hypothesis: $\hat{\beta_1} = 0$ and alternative hypothesis $\hat{\beta_1} \neq 0$. Then, we put drop in deviance and change in degrees of freedom, we get p-value equals to 1.163229e-36, which is smaller than 0.05. Which means, null hypothesis is rejected and $\hat{\beta_1} \neq 0$.
+
+Model2 use $spi1$ and $spi2$ at the same time. Here, we apply likelihood ratio test to compare those models at first: our null hypothesis is $\hat{\beta_2} = 0$ and the alternative hypothesis is $\hat{\beta_2} \neq 0$. By putting in the drop in deviance and change in degrees of freedom, we get p-value equals to 5.073025e-15, which is smaller than 0.05. So, it indicates that the null hypothesis is rejected, so $\hat{\beta_2} \neq 0$.
+
+Then we fit our model3 and compare it with model2: still we apply the likelihood ratio test at first. Firstly we set the null hypothesis to be $\hat{\beta_3} = \hat{\beta_4} = 0$ and the alternative hypothesis to be $\hat{\beta_3} \neq 0$ or $\hat{\beta_4} \neq 0$. By the likelihood ratio test, the p-value is 0.04836398, which is smaller than 0.05. That means, null hypothesis is rejected.
+
+Comparing the three models, we notice that the model3 has lowest AIC but model2 has lowest BIC. Here, we still pick model3 to be the "best" model because of the result of the likelihood ratio test and its highest McFadden r-squared value of 0.03668244. In summary, model3 has AIC of 5977.392, BIC of 6009.605 and McFadden r-squared value of 0.03668244.
+
+By looking at the table, our model3 is: $\hat{log(Odds for Tier1Home Team Win)}$ = -0.1461877 + 0.0424858 * $spi1$ + -0.0430621 * $spi2$ + 0.0006065 * $importance1$ + -0.0036273 * $importance2$. The intercept in the model is $\hat{\beta_0} = -0.1461877$, with 95% CI of (-0.3764947, 0.0832603), which means as all other variables equal to 0, the expected log-odds for the home team to win the game is -0.1461877. The coefficient of $spi1$ in the model is 0.0424858, with 95% CI of (0.0316373, 0.0534193), which means holding other variables constant, one-unit increase in $spi1$ increases the expected log-odds of home team to win the game by 0.0424858. The coefficient of $spi2$ in the model is -0.0430621, with 95% CI of (-0.0492953, -0.0369315), which means holding other variables constant, one-unit increase in $spi2$ decreases the expected log-odds of home team to win the game by 0.0430621. The coefficient of $importance1$ is 0.0006065 with 95% CI of (-0.0024770, 0.0036848), which means holding other variables constant, one-unit increase in $importance1$ increases the expected log-odds of home team to win the game by 0.0006065. The coefficient of $importance2$ is -0.0036273 with 95% CI of (-0.0065552, -0.0007216), which means holding other variables constant, one-unit increase in $importance2$ decreases the expected log-odds of home team to win the game by 0.0036273.
+
+By the four plots of empirical logits, we see that the linearity assumptions are not quite satisfied since the points are not approximately lying on a line. However, among all the models in this tier, model3 is the "best" according to previous analysis.
+
+### Tier2: weak teams, $spi1$ between 29.13 and 39.6
+
+```{r}
+modeltry21 <- glm(result ~ spi2, data = df2, family = "binomial")
+pchisq(6327.257 - 6084.7, df = 1, lower.tail = FALSE)
+
+modeltry22 <- glm(result ~ spi1 + spi2, data = df2, family = "binomial")
+pchisq(6084.7 - 6057.601, df = 1, lower.tail = FALSE)
+
+modeltry23 <- glm(result ~ spi1 + spi2 + importance1 + importance2, data = df2, family = "binomial")
+pchisq(6057.601 - 6054.429, df = 2, lower.tail = FALSE)
+
+modeltry2check <- glm(result ~ 1, data = df2, family = "binomial")
+
+modeltry22 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+modeltry22 %>% glance() %>% kable(caption = "Model2 Information")
+1 - (-3028.8 / -3163.629)
+```
+
+Still, we fit three models here with model1 one using $spi2$ only, model2 using $spi1$ and $spi2$ and model3 using $spi1$, $spi2$, $importance1$ and $importance2$:
+
+Model1: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi2$
+
+Model2: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ 
+
+Model3: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ + $\hat{\beta_3}$ * $importance1$ + $\hat{\beta_4}$ * $importance2$
+
+We apply the similar process as what we did in the tier1: by likelihood ratio tests between model1 and intercept only model, we get p-value equals to 1.089375e-54 < 0.05, which means $\hat{\beta_1} \neq 0$; by likelihood ratio tests between model2 and model1, we get p-value equals to 1.932979e-07 < 0.05, which means $\hat{\beta_2} \neq 0$; by likelihood ratio tests between model3 and model2, we get p-value equals to 0.2047429, which is larger than 0.05, so that indicates $\hat{\beta_3} = 0$ or $\hat{\beta_4} = 0$. By AIC and BIC, we notice that model2 has lowest BIC but model3 has lowest AIC. However, by the likelihood ratio test result, we believe model2 is the "best" model here. Here, model2 has AIC of 6063.601, BIC of 6082.93 and McFadden r-squared of 0.04261846.
+
+By looking at the table, our model2 is: $\hat{log(Odds for Tier2Home Team Win)}$ = -0.6018630 + 0.0540566 * $spi1$ + -0.0423386 * $spi2$. The intercept has 95% CI of (-1.2900333, 0.0853970); the coefficient of $spi1$ has 95% CI of (0.0336511, 0.0745473); the coefficient of $spi2$ has 95% CI of (-0.0477681, -0.0370014). Those coefficients could be interpreted similarly like the previous models. 
+
+### Tier3: moderate teams: $spi1$ between 39.6 and 50.084
+
+```{r}
+modeltry31 <- glm(result ~ spi2, data = df3, family = "binomial")
+pchisq(6382.121 - 6068.111, df = 1, lower.tail = FALSE)
+
+modeltry32 <- glm(result ~ spi1 + spi2, data = df3, family = "binomial")
+pchisq(6068.111 - 6039.317, df = 1, lower.tail = FALSE)
+
+modeltry33 <- glm(result ~ spi1 + spi2 + importance1 + importance2, data = df3, family = "binomial")
+pchisq(6039.317 - 6033.884, df = 2, lower.tail = FALSE)
+
+modeltry3check <- glm(result ~ 1, data = df3, family = "binomial")
+
+modeltry32 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+modeltry32 %>% glance() %>% kable(caption = "Model2 Information")
+
+1 - (-3019.658 / -3191.06)
+```
+
+Model1: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi2$
+
+Model2: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ 
+
+Model3: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ + $\hat{\beta_3}$ * $importance1$ + $\hat{\beta_4}$ * $importance2$
+
+We apply the similar process as what we did in the tier1 and tier2: by likelihood ratio tests between model1 and intercept only model, we get p-value equals to 2.922072e-70 < 0.05, which means $\hat{\beta_1} \neq 0$; by likelihood ratio tests between model2 and model1, we get p-value equals to 8.050011e-08 < 0.05, which means $\hat{\beta_2} \neq 0$; by likelihood ratio tests between model3 and model2, we get p-value equals to 0.06610572, which is larger than 0.05, so that indicates $\hat{\beta_3} = 0$ or $\hat{\beta_4} = 0$. By AIC and BIC, we notice that model2 has lowest BIC but model3 has lowest AIC. However, by the likelihood ratio test result, we believe model2 is the "best" model here. Model2 has AIC of 6043.884, BIC of 6076.102 and McFadden r-squared of 0.05371319.
+
+By looking at the table, our model2 is: $\hat{log(Odds for Tier2Home Team Win)}$ = -0.7129158 + 0.0559419 * $spi1$ + -0.0447885 * $spi2$. The intercept has 95% CI of (-1.6111243, 0.1848869); the coefficient of $spi1$ has 95% CI of (0.0354644, 0.0764931); the coefficient of $spi2$ has 95% CI of (-0.0499340, -0.0397326). Those coefficients could be interpreted similarly like the previous models.
+
+### Tier4: Good teams, $spi1$ between 50.084 and 63.74
+
+```{r}
+modeltry41 <- glm(result ~ spi2, data = df4, family = "binomial")
+
+pchisq(6405.656 - 5919.659, df = 1, lower.tail = FALSE)
+
+modeltry42 <- glm(result ~ spi1 + spi2, data = df4, family = "binomial")
+
+pchisq(5919.659 - 5871.225, df = 1, lower.tail = FALSE)
+
+modeltry43 <- glm(result ~ spi1 + spi2 + importance1 + importance2, data = df4, family = "binomial")
+
+pchisq(5871.225 - 5868.928, df = 2, lower.tail = FALSE)
+
+modeltry4check <- glm(result ~ 1, data = df4, family = "binomial")
+
+modeltry42 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+modeltry42 %>% glance() %>% kable(caption = "Model2 Information")
+1 - (-2935.613 / -3202.878)
+```
+
+Model1: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi2$
+
+Model2: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ 
+
+Model3: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ + $\hat{\beta_3}$ * $importance1$ + $\hat{\beta_4}$ * $importance2$
+
+We apply the similar process as what we did in the previous tiers: by likelihood ratio tests between model1 and intercept only model, we get p-value equals to 1.058831e-107 < 0.05, which means $\hat{\beta_1} \neq 0$; by likelihood ratio tests between model2 and model1, we get p-value equals to 3.41594e-12 < 0.05, which means $\hat{\beta_2} \neq 0$; by likelihood ratio tests between model3 and model2, we get p-value equals to 0.3171121, which is much larger than 0.05, so that indicates $\hat{\beta_3} = 0$ or $\hat{\beta_4} = 0$. By AIC and BIC, we notice that model2 has lowest BIC but model3 has lowest AIC. However, by the likelihood ratio test result, we believe model2 is the "best" model here. Model2 has AIC of 5877.225, BIC of 5896.554 and McFadden r-squared of 0.08344526.
+
+By looking at the table, our model2 is: $\hat{log(Odds for Tier2Home Team Win)}$ = -0.6412210 + 0.0581916 * $spi1$ + -0.0507153 * $spi2$. The intercept has 95% CI of (-1.5436982, 0.2604930); the coefficient of $spi1$ has 95% CI of (0.0417118, 0.0747666); the coefficient of $spi2$ has 95% CI of (-0.0554389, -0.0460759). Those coefficients could be interpreted similarly like the previous models.
+
+### Tier5: Outstanding teams, $spi1$ > 63.74 or equal to 63.74
+
+```{r}
+modeltry51 <- glm(result ~ spi2, data = df5, family = "binomial")
+
+pchisq(6351.126 - 5832.314, df = 1, lower.tail = FALSE)
+
+modeltry52 <- glm(result ~ spi1 + spi2, data = df5, family = "binomial")
+
+pchisq(5832.314 - 5548.963, df = 1, lower.tail = FALSE)
+
+modeltry53 <- glm(result ~ spi1 + spi2 + importance1 + importance2, data = df5, family = "binomial")
+
+pchisq(5548.963 - 5547.327, df = 2, lower.tail = FALSE)
+
+modeltry5check <- glm(result ~ 1, data = df5, family = "binomial")
+
+modeltry52 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+modeltry52 %>% glance() %>% kable(caption = "Model2 Information")
+
+1 - (-2774.481 / -3175.563)
+
+```
+
+Model1: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi2$
+
+Model2: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ 
+
+Model3: $\hat{log(Odds for Tier2Home Team Win)}$ = $\hat{\beta_0}$ + $\hat{\beta_1}$ * $spi1$ + $\hat{\beta_2}$ * $spi2$ + $\hat{\beta_3}$ * $importance1$ + $\hat{\beta_4}$ * $importance2$
+
+We apply the similar process as what we did in the previous tiers: by likelihood ratio tests between model1 and intercept only model, we get p-value equals to 7.673749e-115 < 0.05, which means $\hat{\beta_1} \neq 0$; by likelihood ratio tests between model2 and model1, we get p-value equals to 1.39756e-63 < 0.05, which means $\hat{\beta_2} \neq 0$; by likelihood ratio tests between model3 and model2, we get p-value equals to 0.4413134, which is much larger than 0.05, so that indicates $\hat{\beta_3} = 0$ or $\hat{\beta_4} = 0$. By AIC and BIC, we notice that model2 has lowest AIC and BIC values at the same time. Here, Model2 has AIC of 5554.963, BIC of 5574.293 and McFadden r-squared of 0.1263026.
+
+By looking at the table, our model2 is: $\hat{log(Odds for Tier2Home Team Win)}$ = -1.0271808 + 0.0697231 * $spi1$ + -0.0588753 * $spi2$. The intercept has 95% CI of (-1.6722365, -0.3843687); the coefficient of $spi1$ has 95% CI of (0.0612481, 0.0783251); the coefficient of $spi2$ has 95% CI of (-0.0639828, -0.0538670). Those coefficients could be interpreted similarly like the previous models.
+
+## Conclusion and Discussion
+
+From the models, we learned that for the general dataset, using SPI's and Importances together makes the "best" model. However, it is not necessarily true for some tiers of the teams. When the home teams are stronger, the importances of the games usually do not contribute as much for the weaker teams. Also, by the McFadden r-squared, we see that when the home teams are stronger, the models we fit are more "accurate" and useful. 
+
+Also, generally, we find the (log) odds of winning for the home team is increasing as the home team is stronger and is decreasing as the opponent is stronger; the (log) odds of winning for the home team is increasing as the importance of the game is higher and is decreasing as the opponent has higher importance of the game. This coincides with our common knowledge about soccer.
+
+## Citations
+
+Boice, Jay. “How Our Club Soccer Predictions Work.” FiveThirtyEight, 10 Aug. 2018, https://fivethirtyeight.com/methodology/how-our-club-soccer-predictions-work/.
+
+Yihui Xie (2019). knitr: A General-Purpose Package for Dynamic Report Generation in R. R package version 1.24.
+
+Yihui Xie (2015) Dynamic Documents with R and knitr. 2nd edition. Chapman and Hall/CRC. ISBN 978-1498716963
+
+Yihui Xie (2014) knitr: A Comprehensive Tool for Reproducible Research in R. In Victoria Stodden, Friedrich Leisch and Roger D. Peng, editors, Implementing Reproducible Computational Research. Chapman and Hall/CRC. ISBN 978-1466561595
+
+Kim, A. Y. and Ismay, C. and Chunn, J. (2018) The fivethirtyeight R Package: 'Tame Data' Principles for Introductory Statistics and Data Science Courses, Technology Innovations in Statistics Education. 11(1)
+
+Hadley Wickham (2017). tidyverse: Easily Install and Load the 'Tidyverse'. http://tidyverse.tidyverse.org, https://github.com/tidyverse/tidyverse.
+
+David Robinson and Alex Hayes (2019). broom: Convert Statistical Analysis Objects into Tidy Tibbles. R package version 0.5.2. http://github.com/tidyverse/broom
+
+Hadley Wickham, Jim Hester and Romain Francois (2018). readr: Read Rectangular Text Data. R package version 1.3.1. https://CRAN.R-project.org/package=readr
+
+Hadley Wickham, Romain François, Lionel Henry and Kirill Müller (2019). dplyr: A Grammar of Data Manipulation. http://dplyr.tidyverse.org, https://github.com/tidyverse/dplyr.
+
+## Appendix
+
+```{r}
+modelcheck %>% tidy() %>% kable(caption = "Intercept only model information")
+modelcheck %>% glance() %>% kable(caption = "Intercept only model Information")
+model1 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model1 Information")
+model1 %>% glance() %>% kable(caption = "Model1 Information")
+model2 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+model2 %>% glance() %>% kable(caption = "Model2 Information")
+model12 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model3 Information")
+model12 %>% glance() %>% kable(caption = "Model3 Information")
+
+modeltry11 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model1 Information")
+modeltry11 %>% glance() %>% kable(caption = "Model1 Information")
+modeltry12 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+modeltry12 %>% glance() %>% kable(caption = "Model2 Information")
+modeltry13 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model3 Information")
+modeltry13 %>% glance() %>% kable(caption = "Model3 Information")
+modeltry1check %>% tidy() %>% kable(caption ="Intercept only model information")
+modeltry1check %>% glance() %>% kable(caption ="Intercept only model information")
+
+modeltry21 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model1 Information")
+modeltry21 %>% glance() %>% kable(caption = "Model1 Information")
+modeltry22 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+modeltry22 %>% glance() %>% kable(caption = "Model2 Information")
+modeltry23 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model3 Information")
+modeltry23 %>% glance() %>% kable(caption = "Model3 Information")
+modeltry2check %>% tidy() %>% kable(caption ="Intercept only model information")
+modeltry2check %>% glance() %>% kable(caption ="Intercept only model information")
+
+modeltry31 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model1 Information")
+modeltry31 %>% glance() %>% kable(caption = "Model1 Information")
+modeltry32 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+modeltry32 %>% glance() %>% kable(caption = "Model2 Information")
+modeltry33 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model3 Information")
+modeltry33 %>% glance() %>% kable(caption = "Model3 Information")
+modeltry3check %>% tidy() %>% kable(caption ="Intercept only model information")
+modeltry3check %>% glance() %>% kable(caption ="Intercept only model information")
+
+modeltry41 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model1 Information")
+modeltry41 %>% glance() %>% kable(caption = "Model1 Information")
+modeltry42 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+modeltry42 %>% glance() %>% kable(caption = "Model2 Information")
+modeltry43 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model3 Information")
+modeltry43 %>% glance() %>% kable(caption = "Model3 Information")
+modeltry4check %>% tidy() %>% kable(caption ="Intercept only model information")
+modeltry4check %>% glance() %>% kable(caption ="Intercept only model information")
+
+modeltry51 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model1 Information")
+modeltry51 %>% glance() %>% kable(caption = "Model1 Information")
+modeltry52 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model2 Information")
+modeltry52 %>% glance() %>% kable(caption = "Model2 Information")
+modeltry53 %>% tidy(conf.int = TRUE) %>% kable(caption = "Model3 Information")
+modeltry53 %>% glance() %>% kable(caption = "Model3 Information")
+modeltry5check %>% tidy() %>% kable(caption ="Intercept only model information")
+modeltry5check %>% glance() %>% kable(caption ="Intercept only model information")
+
+```
+
+
+```{r ref.label=knitr::all_labels(), echo = TRUE, eval = FALSE}
+```
